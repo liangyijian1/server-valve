@@ -1,22 +1,37 @@
 #include <cstdio>
+#include <cstdio>
 #include <winsock2.h>
 #include "_utils.h"
+#include "MvCameraControl.h"
+#include "cmdline.h"
 
 #define BUF_LEN  100
 #pragma comment(lib,"ws2_32.lib")
 
 int main(int argc, char** argv)
 {
+    cv::utils::logging::setLogLevel(utils::logging::LOG_LEVEL_SILENT);
+    cmdline::parser a;
+    a.add<string>("path", 'p', "tem path", true, "");
+    a.parse_check(argc, argv);
+    string tempath = a.get<string>("path");
     _utils u;
+    u.m_matDst = imread(tempath, 0);
+    cout << u.m_matDst.size() << '\n';
+
     WSADATA wd;
     SOCKET ServerSock, ClientSock;
-    char Buf[BUF_LEN] = {0};
+    char Buf[BUF_LEN] = { 0 };
     SOCKADDR ClientAddr;
     SOCKADDR_IN ServerSockAddr;
     int addr_size = 0, recv_len = 0;
+    VideoCapture capture(0);
+    capture.set(CAP_PROP_FOURCC, cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
+    capture.set(CAP_PROP_FRAME_WIDTH, 5472);
+    capture.set(CAP_PROP_FRAME_HEIGHT, 3648);
 
     /* 初始化操作sock需要的DLL */
-    WSAStartup(MAKEWORD(2,2),&wd);
+    WSAStartup(MAKEWORD(2, 2), &wd);
     /* 创建服务端socket */
     if (-1 == (ServerSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)))
     {
@@ -53,10 +68,14 @@ int main(int argc, char** argv)
         int recv_len = recv(ClientSock, Buf, BUF_LEN, 0);
         printf("客户端发送过来的数据为：%s\n", Buf);
         //海康拍摄2
-        u.m_matSrc = imread(R"(C:\Users\22692\Desktop\img\g4\a804b8ba2723f33a8b351386a0751ad.bmp)", 0);
-        u.m_matDst = imread(R"(C:\Users\22692\Desktop\img\g4\3aa5c8c297ecede1313620cc5763436.bmp)", 0);
-        u.Match();
 
+        Mat frame;
+        capture >> frame;
+        cvtColor(frame, u.m_matSrc, COLOR_BGR2GRAY);
+
+        u.Match();
+        u.m_matSrc.release();
+        frame.release();
         /* 发送数据到客户端 */
         send(ClientSock, Buf, recv_len, 0);
         /* 关闭客户端套接字 */

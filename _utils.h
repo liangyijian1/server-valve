@@ -190,12 +190,12 @@ struct s_BlockMax
     {
         if (vecBlock.size() == 0)
             return;
-        //æ‰¾å‡ºæ‰€æœ‰è·ŸrectIgnoreäº¤é›†çš„block
+        //ÕÒ³öËùÓÐ¸úrectIgnore½»¼¯µÄblock
         int iSize = vecBlock.size();
         for (int i = 0; i < iSize; i++)
         {
             Rect rectIntersec = rectIgnore & vecBlock[i].rect;
-            //ç„¡äº¤é›†
+            //Ÿo½»¼¯
             if (rectIntersec.width == 0 && rectIntersec.height == 0)
                 continue;
             minMaxLoc(matSrc(vecBlock[i].rect), 0, &vecBlock[i].dMax, 0, &vecBlock[i].ptMaxLoc);
@@ -232,10 +232,12 @@ public:
               m_dScore(0.5),
               m_iMinReduceArea(256),
               m_dToleranceAngle(10.0),
-              m_bStopLayer1(false)
+              m_bStopLayer1(false),
+              th(0.85)
     {}
     int m_iMaxPos;
     double m_dMaxOverlap;
+    float th;
     double m_dScore;
     int m_iMinReduceArea;
     double m_dToleranceAngle;
@@ -250,6 +252,8 @@ public:
     bool Match();
     int GetTopLayer(Mat* matTempl, int iMinDstLength);
     void MatchTemplate(cv::Mat& matSrc, s_TemplData* pTemplData, cv::Mat& matResult, int iLayer, bool bUseSIMD);
+    int IM_Conv_SIMD (unsigned char* pCharKernel, unsigned char *pCharConv, int iLength);
+    int _mm_hsum_epi32 (__m128i V);
     void CCOEFF_Denominator(cv::Mat& matSrc, s_TemplData* pTemplData, cv::Mat& matResult, int iLayer);
     void FilterWithScore(vector<s_MatchParameter>* vec, double dScore);
     void FilterWithRotatedRect(vector<s_MatchParameter>* vec, int iMethod, double dMaxOverLap);

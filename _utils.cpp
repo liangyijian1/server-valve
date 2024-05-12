@@ -213,26 +213,60 @@ bool _utils::Match()
         if (i + 1 == m_iMaxPos)
             break;
     }
-
-    for (int i = 0; i < (int)m_vecSingleTargetData.size(); i++)
+    s_SingleTargetMatch sstm = *(m_vecSingleTargetData.end() - 1);
+    cout << "Matched Score : " << sstm.dMatchScore << '\n';
+    if (sstm.dMatchScore > th)
     {
-        s_SingleTargetMatch sstm = m_vecSingleTargetData[i];
-        cout << "Matched Score : " << sstm.dMatchScore << '\n';
-        if (sstm.dMatchScore > 0.84)
-        {
-            cout << "OK" << '\n';
-        }
-        else {
-            cout << "NG" << '\n';
-        }
+        cout << "OK" << '\n';
     }
+    else {
+        cout << "NG" << '\n';
+    }
+
+//    for (auto sstm : m_vecSingleTargetData)
+//    {
+//        auto n_size = m_vecSingleTargetData.size();
+//        cout << "Matched Score : " << n_size <<", " << sstm.dMatchScore << '\n';
+//        if (sstm.dMatchScore > 0.84)
+//        {
+//            cout << "OK" << '\n';
+//        }
+//        else {
+//            cout << "NG" << '\n';
+//        }
+//    }
     return (int)m_vecSingleTargetData.size();
 }
 
 void _utils::MatchTemplate(Mat& matSrc, s_TemplData* pTemplData, Mat& matResult, int iLayer, bool bUseSIMD)
 {
+    if (bUseSIMD)
+    {
+        //From ImageShop
+        matResult.create (matSrc.rows - pTemplData->vecPyramid[iLayer].rows + 1,
+                          matSrc.cols - pTemplData->vecPyramid[iLayer].cols + 1, CV_32FC1);
+        matResult.setTo (0);
+        cv::Mat& matTemplate = pTemplData->vecPyramid[iLayer];
 
-    matchTemplate(matSrc, pTemplData->vecPyramid[iLayer], matResult, CV_TM_CCORR);
+        int  t_r_end = matTemplate.rows, t_r = 0;
+        for (int r = 0; r < matResult.rows; r++)
+        {
+            auto* r_matResult = matResult.ptr<float> (r);
+            auto* r_source = matSrc.ptr<uchar> (r);
+            uchar* r_template, *r_sub_source;
+            for (int c = 0; c < matResult.cols; ++c, ++r_matResult, ++r_source)
+            {
+                r_template = matTemplate.ptr<uchar> ();
+                r_sub_source = r_source;
+                for (t_r = 0; t_r < t_r_end; ++t_r, r_sub_source += matSrc.cols, r_template += matTemplate.cols)
+                {
+                    *r_matResult = *r_matResult + IM_Conv_SIMD (r_template, r_sub_source, matTemplate.cols);
+                }
+            }
+        }
+    }
+    else
+        matchTemplate(matSrc, pTemplData->vecPyramid[iLayer], matResult, CV_TM_CCORR);
     CCOEFF_Denominator(matSrc, pTemplData, matResult, iLayer);
 }
 
@@ -563,4 +597,33 @@ void _utils::LearnPattern() {
     }
     templData->bIsPatternLearned = true;
 
+}
+
+int _utils::IM_Conv_SIMD(unsigned char *pCharKernel, unsigned char *pCharConv, int iLength) {
+    const int iBlockSize = 16, Block = iLength / iBlockSize;
+    __m128i SumV = _mm_setzero_si128 ();
+    __m128i Zero = _mm_setzero_si128 ();
+    for (int Y = 0; Y < Block * iBlockSize; Y += iBlockSize)
+    {
+        __m128i SrcK = _mm_loadu_si128 ((__m128i*)(pCharKernel + Y));
+        __m128i SrcC = _mm_loadu_si128 ((__m128i*)(pCharConv + Y));
+        __m128i SrcK_L = _mm_unpacklo_epi8 (SrcK, Zero);
+        __m128i SrcK_H = _mm_unpackhi_epi8 (SrcK, Zero);
+        __m128i SrcC_L = _mm_unpacklo_epi8 (SrcC, Zero);
+        __m128i SrcC_H = _mm_unpackhi_epi8 (SrcC, Zero);
+        __m128i SumT = _mm_add_epi32 (_mm_madd_epi16 (SrcK_L, SrcC_L), _mm_madd_epi16 (SrcK_H, SrcC_H));
+        SumV = _mm_add_epi32 (SumV, SumT);
+    }
+    int Sum = _mm_hsum_epi32 (SumV);
+    for (int Y = Block * iBlockSize; Y < iLength; Y++)
+    {
+        Sum += pCharKernel[Y] * pCharConv[Y];
+    }
+    return Sum;
+}
+
+int _utils::_mm_hsum_epi32(__m128i V) {
+    __m128i T = _mm_add_epi32 (V, _mm_srli_si128 (V, 8));  // V3+V1   V2+V0  V1  V0
+    T = _mm_add_epi32 (T, _mm_srli_si128 (T, 4));    // V3+V1+V2+V0  V2+V0+V1 V1+V0 V0
+    return _mm_cvtsi128_si32 (T);       // ÌáÈ¡µÍÎ»
 }
